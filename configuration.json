@@ -1,37 +1,40 @@
 {
+    "ArduinoPort": "COM3",
+    "InputNumber": 8,
+    "LogLevel": "INFO",
     "AHKExecutablePath": "C:\\Program Files\\AutoHotkey\\AutoHotkey.exe",
     "buttons": [
         {
-            "shortPressAction": "./a.ahk",
-            "longPressAction": "./aL.ahk"
+            "shortPressAction": "./ahkMacros/a.ahk",
+            "longPressAction": "./ahkMacros/aL.ahk"
         },
         {
-            "shortPressAction": "./b.ahk",
-            "longPressAction": "./bL.ahk"
+            "shortPressAction": "./ahkMacros/b.ahk",
+            "longPressAction": "./ahkMacros/bL.ahk"
         },
         {
-            "shortPressAction": "./c.ahk",
-            "longPressAction": "./cL.ahk"
+            "shortPressAction": "./ahkMacros/c.ahk",
+            "longPressAction": "./ahkMacros/cL.ahk"
         },
         {
-            "shortPressAction": "./d.ahk",
-            "longPressAction": "./dL.ahk"
+            "shortPressAction": "./ahkMacros/d.ahk",
+            "longPressAction": "./ahkMacros/dL.ahk"
         },
         {
-            "shortPressAction": "./e.ahk",
-            "longPressAction": "./eL.ahk"
+            "shortPressAction": "./ahkMacros/e.ahk",
+            "longPressAction": "./ahkMacros/eL.ahk"
         },
         {
-            "shortPressAction": "./f.ahk",
-            "longPressAction": "./fL.ahk"
+            "shortPressAction": "./ahkMacros/f.ahk",
+            "longPressAction": "./ahkMacros/fL.ahk"
         },
         {
-            "shortPressAction": "./g.ahk",
-            "longPressAction": "./gL.ahk"
+            "shortPressAction": "./ahkMacros/g.ahk",
+            "longPressAction": "./ahkMacros/gL.ahk"
         },
         {
-            "shortPressAction": "./h.ahk",
-            "longPressAction": "./hL.ahk"
+            "shortPressAction": "./ahkMacros/h.ahk",
+            "longPressAction": "./ahkMacros/hL.ahk"
         }
     ]
 }
