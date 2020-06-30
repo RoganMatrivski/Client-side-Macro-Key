@@ -3,24 +3,26 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
+	"math"
 	"math/bits"
+	"os"
 	"os/exec"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/itchyny/volume-go"
 	"github.com/jacobsa/go-serial/serial"
-)
-
-const (
-	buttonDebounceTime    time.Duration = time.Millisecond * 50
-	buttonLongPressTime   time.Duration = time.Millisecond * 300
-	potentiometerDeadzone byte          = 1
+	"github.com/jroimartin/gocui"
 )
 
 type Configs struct {
+	ArduinoPort       string    `json:"ArduinoPort"`
+	InputNumber       int       `json:"InputNumber"`
+	LogLevel          string    `json:"LogLevel"`
 	AHKExecutablePath string    `json:"AHKExecutablePath"`
 	Buttons           []Buttons `json:"buttons"`
 }
@@ -33,7 +35,22 @@ type Buttons struct {
 	lastPressedTime    time.Time
 	buttonPressedTime  time.Time
 	buttonReleasedTime time.Time
+	buttonID           int
 }
+
+type loggingLevel int
+
+const (
+	logERROR loggingLevel = iota
+	logWARNING
+	logINFO
+	buttonDebounceTime    time.Duration = time.Millisecond * 50
+	buttonLongPressTime   time.Duration = time.Millisecond * 300
+	potentiometerDeadzone byte          = 1
+	logPath               string        = "./applog.log"
+)
+
+func (lv loggingLevel) String() string { return [...]string{"ERROR", "WARNING", "INFO"}[lv] }
 
 func reverseAny(s interface{}) {
 	n := reflect.ValueOf(s).Len()
@@ -68,32 +85,6 @@ func byteToBits(data byte) (st []int) {
 	return
 }
 
-var (
-	conf         Configs
-	buttonStates []Buttons
-	signature    = [4]byte{2, 4, 3, 4}
-)
-
-func setup() {
-	jsonFile, _ := ioutil.ReadFile("./configuration.json")
-	err := json.Unmarshal(jsonFile, &conf)
-	if err != nil {
-		panic(err)
-	}
-
-	buttonStates = conf.Buttons
-
-	if len(buttonStates) > 8 {
-		panic("More than eight keys macro are not supported by hardware")
-	}
-
-	for _, b := range buttonStates {
-		if b.ShortPressAction == "" && b.LongPressAction == "" {
-			panic("One of the key have both of the actions unassigned.")
-		}
-	}
-}
-
 func byteAbs(b byte) byte {
 	if b < 0 {
 		return b
@@ -101,18 +92,113 @@ func byteAbs(b byte) byte {
 	return -b
 }
 
-var potentiometerState, prevPotentiometerState byte
+var (
+	conf Configs
+
+	potentiometerData      byte
+	prevPotentiometerState byte
+
+	buttonStates []Buttons
+
+	signature     = []byte{2, 4, 3, 4}
+	offset    int = -1
+
+	logs          []string
+	infoLogger    *log.Logger
+	warningLogger *log.Logger
+	errorLogger   *log.Logger
+
+	g *gocui.Gui
+)
+
+func arrayLog(s string) {
+	logs = append(logs[1:], s)
+}
+
+func logger(s string, lv loggingLevel) {
+	switch lv {
+	case logERROR:
+		errorLogger.Println(s)
+	case logWARNING:
+		warningLogger.Println(s)
+	case logINFO:
+		infoLogger.Println(s)
+	}
+
+	arrayLog(s)
+
+	g.Update(func(g *gocui.Gui) error {
+		v, err := g.View("log")
+		_, maxY := v.Size()
+		if err != nil {
+			panic(err)
+		}
+		v.Clear()
+		fmt.Fprintln(v, strings.Join(logs[len(logs)-maxY:], "\n"))
+		return nil
+	})
+}
+
+func setup() {
+	logs = make([]string, 100)
+	file, err := os.Create(logPath)
+	if err != nil {
+		panic(err)
+	}
+
+	infoLogger = log.New(file, "INFO\t: ", log.Ldate|log.Ltime|log.Lshortfile)
+	warningLogger = log.New(file, "WARNING\t: ", log.Ldate|log.Ltime|log.Lshortfile)
+	errorLogger = log.New(file, "ERROR\t: ", log.Ldate|log.Ltime|log.Lshortfile)
+
+	jsonFile, _ := ioutil.ReadFile("./configuration.json")
+	if err := json.Unmarshal(jsonFile, &conf); err != nil {
+		logger(err.Error(), logERROR)
+	}
+
+	buttonStates = conf.Buttons
+
+	if len(buttonStates) > conf.InputNumber {
+		logger("More than eight keys macro are not supported by hardware", logERROR)
+	}
+
+	for i, b := range buttonStates {
+		if b.ShortPressAction == "" && b.LongPressAction == "" {
+			logger("One of the key have both of the actions unassigned.", logWARNING)
+		}
+		buttonStates[i].buttonID = i
+	}
+}
+
+func valueToBar(value byte, barLength int, barString string) string {
+	mappedValue := int(math.Floor((float64(value) / float64(100)) * float64(barLength)))
+	bar := strings.Repeat(barString, mappedValue)
+	empty := strings.Repeat(" ", barLength-mappedValue)
+	return bar + empty
+}
 
 func potentiometerLoop() {
+	// Idk if i should use for loop + sleep combo here, but it works tho.
 	for {
-		if byteAbs(potentiometerState-prevPotentiometerState) > potentiometerDeadzone {
-			err := volume.SetVolume(int(potentiometerState))
+		if byteAbs(potentiometerData-prevPotentiometerState) > potentiometerDeadzone {
+			err := volume.SetVolume(int(potentiometerData))
 			if err != nil {
-				log.Fatalf("set volume failed: %+v", err)
+				logger(err.Error(), logERROR)
 			}
 
-			fmt.Printf("set volume to %v%%\n", potentiometerState)
-			prevPotentiometerState = potentiometerState
+			logger(fmt.Sprintf("set volume to %v%%", potentiometerData), logINFO)
+
+			g.Update(func(g *gocui.Gui) error {
+				v, err := g.View("volume")
+				maxX, _ := v.Size()
+				if err != nil {
+					panic(err)
+				}
+				v.Clear()
+				fmt.Fprint(v, "[", valueToBar(potentiometerData, maxX-3, "="), "]")
+				return nil
+			})
+
+			prevPotentiometerState = potentiometerData
 		}
 
 		time.Sleep((1 * time.Second) / 20)
@@ -125,18 +211,18 @@ func buttonAction(b Buttons) {
 		cmd := exec.Command(conf.AHKExecutablePath, b.ShortPressAction)
 		err := cmd.Start()
 		if err != nil {
-			panic(err)
+			logger(err.Error(), logERROR)
 		}
+		logger(fmt.Sprintf("Button %v short pressed", b.buttonID), logINFO)
 	} else {
 		// Longpress
 		cmd := exec.Command(conf.AHKExecutablePath, b.LongPressAction)
 		err := cmd.Start()
 		if err != nil {
-			panic(err)
+			logger(err.Error(), logERROR)
 		}
+		logger(fmt.Sprintf("Button %v long pressed", b.buttonID), logINFO)
 	}
-
-	// fmt.Printf("%v\n%v\n%v\n%v\n", b.buttonPressedTime, b.buttonReleasedTime, t1, t2)
 }
 
 func processButtonSignal(buttonSignal []int) {
@@ -165,14 +251,110 @@ func processButtonSignal(buttonSignal []int) {
 	}
 }
 
+func readSerialData(serialPort io.ReadWriteCloser) {
+	for {
+		// Read the data from serial port
+		buff := make([]byte, 6)
+		serialPort.Read(buff)
+
+		// Extend it
+		extBuff := append(buff, buff...)
+
+		// Find the offset
+		// This process is run once to get the serial data read offset
+		for offset == -1 || (extBuff[offset+4] != 255 && extBuff[offset+5] != 100) {
+			for i := range extBuff {
+				if i > len(extBuff)-4 {
+					break
+				}
+
+				// Check it with a predetermined data signature.
+				// I chose 2434 for... reasons. Just search it on google. It's an alias for an agency.
+				if arrayCompare(extBuff[i:i+4], signature) {
+					offset = i
+					break
+				}
+			}
+		}
+		// if offset == -1 {
+		// 	for i := range extBuff {
+		// 		if i > len(extBuff)-4 {
+		// 			break
+		// 		}
+
+		// 		// Check it with a predetermined data signature.
+		// 		// I chose 2434 for... reasons. Just search it on google. It's an alias for an agency.
+		// 		if arrayCompare(extBuff[i:i+4], signature) {
+		// 			offset = i
+		// 			break
+		// 		}
+		// 	}
+		// }
+
+		// Get serial data from extended serial data based from offset
+		serialData := extBuff[offset+4 : offset+6]
+
+		// logger(fmt.Sprint(serialData, offset, extBuff), logINFO)
+
+		// Set the potentiometer data to a variable to read later on the potentiometerLoop
+		potentiometerData = serialData[1]
+
+		// Process the button data
+		buttonsData := byteToBits(serialData[0])
+		reverseAny(buttonsData)
+		processButtonSignal(buttonsData)
+	}
+}
+
+func mainLayout(g *gocui.Gui) error {
+	maxX, maxY := g.Size()
+	if v, err := g.SetView("log", maxX/4, 3, maxX-1, maxY-1); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Autoscroll = true
+	}
+
+	if v, err := g.SetView("volume", maxX/4, 0, maxX-1, 2); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Autoscroll = true
+	}
+
+	return nil
+}
+
 func main() {
+	// All of these below is for the interface.
+	var err error
+	g, err = gocui.NewGui(gocui.OutputNormal)
+	if err != nil {
+		logger(err.Error(), logERROR)
+	}
+
+	// Close GUI after loop ends
+	defer g.Close()
+
+	g.SetManagerFunc(mainLayout)
+
+	// Set GUI keybindings
+	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return gocui.ErrQuit
+	}); err != nil {
+		logger(err.Error(), logERROR)
+	}
+
+	// =====================================================
+
 	setup()
 
+	// Run the potentiometer loop
 	go potentiometerLoop()
 
 	// Set up options.
 	options := serial.OpenOptions{
-		PortName:        "COM3",
+		PortName:        conf.ArduinoPort,
 		BaudRate:        19200,
 		DataBits:        8,
 		StopBits:        1,
@@ -188,37 +370,10 @@ func main() {
 	// Make sure to close it later.
 	defer port.Close()
 
-	signature := []byte{2, 4, 3, 4}
-	for {
-		// Find offset
-		buff := make([]byte, 6)
-		port.Read(buff)
-		extBuff := append(buff, buff...)
+	go readSerialData(port)
 
-		var offset int
-		for i := range extBuff {
-			if i > len(extBuff)-4 {
-				break
-			}
-
-			// fmt.Print(extBuff[i:i+4], i)
-			if arrayCompare(extBuff[i:i+4], signature) {
-				offset = i
-				break
-			}
-		}
-
-		serialData := extBuff[offset+4 : offset+6]
-
-		potentiometerData := serialData[1]
-		buttonsData := byteToBits(serialData[0])
-		reverseAny(buttonsData)
-
-		potentiometerState = potentiometerData
-		// buttonState = buttonsData
-
-		processButtonSignal(buttonsData)
-
-		// fmt.Println(buttonsData, potentiometerData)
+	// Main GUI Loop
+	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
+		logger(err.Error(), logERROR)
 	}
 }

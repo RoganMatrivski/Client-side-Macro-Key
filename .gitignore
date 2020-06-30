@@ -70,4 +70,6 @@
 # Ignore all local history of files
 .history
 
+applog.log
+
 # End of https://www.toptal.com/developers/gitignore/api/go,visualstudiocode
