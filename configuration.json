@@ -1,0 +1,37 @@
+{
+    "AHKExecutablePath": "C:\\Program Files\\AutoHotkey\\AutoHotkey.exe",
+    "buttons": [
+        {
+            "shortPressAction": "./a.ahk",
+            "longPressAction": "./aL.ahk"
+        },
+        {
+            "shortPressAction": "./b.ahk",
+            "longPressAction": "./bL.ahk"
+        },
+        {
+            "shortPressAction": "./c.ahk",
+            "longPressAction": "./cL.ahk"
+        },
+        {
+            "shortPressAction": "./d.ahk",
+            "longPressAction": "./dL.ahk"
+        },
+        {
+            "shortPressAction": "./e.ahk",
+            "longPressAction": "./eL.ahk"
+        },
+        {
+            "shortPressAction": "./f.ahk",
+            "longPressAction": "./fL.ahk"
+        },
+        {
+            "shortPressAction": "./g.ahk",
+            "longPressAction": "./gL.ahk"
+        },
+        {
+            "shortPressAction": "./h.ahk",
+            "longPressAction": "./hL.ahk"
+        }
+    ]
+}
