@@ -1,5 +1,5 @@
 {
-    "port": "COM5",
+    "port": "COM3",
     "board": "arduino:avr:micro",
     "programmer": "AVR ISP",
     "sketch": "arduinoSource\\source.ino"
