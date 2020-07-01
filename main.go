@@ -20,11 +20,16 @@ import (
 )
 
 type Configs struct {
-	ArduinoPort       string    `json:"ArduinoPort"`
-	InputNumber       int       `json:"InputNumber"`
-	LogLevel          string    `json:"LogLevel"`
-	AHKExecutablePath string    `json:"AHKExecutablePath"`
-	Buttons           []Buttons `json:"buttons"`
+	ArduinoPort       string     `json:"ArduinoPort"`
+	InputNumber       int        `json:"InputNumber"`
+	LogLevel          string     `json:"LogLevel"`
+	AHKExecutablePath string     `json:"AHKExecutablePath"`
+	Profiles          []Profiles `json:"Profiles"`
+}
+
+type Profiles struct {
+	Name    string    `json:"Name"`
+	Buttons []Buttons `json:"Buttons"`
 }
 
 type Buttons struct {
@@ -155,7 +160,7 @@ func setup() {
 		logger(err.Error(), logERROR)
 	}
 
-	buttonStates = conf.Buttons
+	buttonStates = conf.Profiles[0].Buttons
 
 	if len(buttonStates) > conf.InputNumber {
 		logger("More than eight keys macro are not supported by hardware", logERROR)
@@ -194,7 +199,7 @@ func potentiometerLoop() {
 					panic(err)
 				}
 				v.Clear()
-				fmt.Fprint(v, "[", valueToBar(potentiometerData, maxX-3, "="), "]")
+				fmt.Fprint(v, " [", valueToBar(potentiometerData, maxX-4, "="), "] ")
 				return nil
 			})
 
@@ -260,23 +265,9 @@ func readSerialData(serialPort io.ReadWriteCloser) {
 		// Extend it
 		extBuff := append(buff, buff...)
 
-		// Find the offset
-		// This process is run once to get the serial data read offset
-		for offset == -1 || (extBuff[offset+4] != 255 && extBuff[offset+5] != 100) {
-			for i := range extBuff {
-				if i > len(extBuff)-4 {
-					break
-				}
-
-				// Check it with a predetermined data signature.
-				// I chose 2434 for... reasons. Just search it on google. It's an alias for an agency.
-				if arrayCompare(extBuff[i:i+4], signature) {
-					offset = i
-					break
-				}
-			}
-		}
-		// if offset == -1 {
+		// // Find the offset
+		// // This process is run once to get the serial data read offset
+		// for offset == -1 || (extBuff[offset+4] != 255 && extBuff[offset+5] != 100) {
 		// 	for i := range extBuff {
 		// 		if i > len(extBuff)-4 {
 		// 			break
@@ -290,6 +281,22 @@ func readSerialData(serialPort io.ReadWriteCloser) {
 		// 		}
 		// 	}
 		// }
+
+		// Find the offset
+		// This process will run for each data received, and i know that it's not that efficient.
+		// But i guess if this works, why should i fix it?
+		for i := range extBuff {
+			if i > len(extBuff)-4 {
+				break
+			}
+
+			// Check it with a predetermined data signature.
+			// I chose 2434 for... reasons. Just search it on google. It's an alias for an agency.
+			if arrayCompare(extBuff[i:i+4], signature) {
+				offset = i
+				break
+			}
+		}
 
 		// Get serial data from extended serial data based from offset
 		serialData := extBuff[offset+4 : offset+6]
@@ -316,6 +323,13 @@ func mainLayout(g *gocui.Gui) error {
 	}
 
 	if v, err := g.SetView("volume", maxX/4, 0, maxX-1, 2); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Autoscroll = true
+	}
+
+	if v, err := g.SetView("profile", 0, 0, (maxX/4)-1, maxY-1); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
