@@ -265,23 +265,6 @@ func readSerialData(serialPort io.ReadWriteCloser) {
 		// Extend it
 		extBuff := append(buff, buff...)
 
-		// // Find the offset
-		// // This process is run once to get the serial data read offset
-		// for offset == -1 || (extBuff[offset+4] != 255 && extBuff[offset+5] != 100) {
-		// 	for i := range extBuff {
-		// 		if i > len(extBuff)-4 {
-		// 			break
-		// 		}
-
-		// 		// Check it with a predetermined data signature.
-		// 		// I chose 2434 for... reasons. Just search it on google. It's an alias for an agency.
-		// 		if arrayCompare(extBuff[i:i+4], signature) {
-		// 			offset = i
-		// 			break
-		// 		}
-		// 	}
-		// }
-
 		// Find the offset
 		// This process will run for each data received, and i know that it's not that efficient.
 		// But i guess if this works, why should i fix it?
