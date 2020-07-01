@@ -33,14 +33,18 @@ type Profiles struct {
 }
 
 type Buttons struct {
-	ShortPressAction   string `json:"shortPressAction"`
-	LongPressAction    string `json:"longPressAction"`
+	ShortPressAction string `json:"shortPressAction"`
+	LongPressAction  string `json:"longPressAction"`
+}
+
+type buttonState struct {
+	buttonIndex        int
 	previousSignal     int
 	lastDebounceTime   time.Time
 	lastPressedTime    time.Time
 	buttonPressedTime  time.Time
 	buttonReleasedTime time.Time
-	buttonID           int
+	associatedButton   Buttons
 }
 
 type loggingLevel int
@@ -103,7 +107,7 @@ var (
 	potentiometerData      byte
 	prevPotentiometerState byte
 
-	buttonStates []Buttons
+	buttonStates []buttonState
 
 	signature     = []byte{2, 4, 3, 4}
 	offset    int = -1
@@ -160,17 +164,26 @@ func setup() {
 		logger(err.Error(), logERROR)
 	}
 
-	buttonStates = conf.Profiles[0].Buttons
-
 	if len(buttonStates) > conf.InputNumber {
-		logger("More than eight keys macro are not supported by hardware", logERROR)
+		logger(fmt.Sprintf("More than %v keys macro are not supported by hardware", conf.InputNumber), logERROR)
 	}
 
-	for i, b := range buttonStates {
-		if b.ShortPressAction == "" && b.LongPressAction == "" {
-			logger("One of the key have both of the actions unassigned.", logWARNING)
+	for _, profile := range conf.Profiles {
+		for _, b := range profile.Buttons {
+			if b.ShortPressAction == "" && b.LongPressAction == "" {
+				logger("One of the key have both of the actions unassigned.", logWARNING)
+			}
 		}
-		buttonStates[i].buttonID = i
+	}
+
+	buttonStates = make([]buttonState, conf.InputNumber)
+
+	// Assign default profile
+	for i, button := range conf.Profiles[0].Buttons {
+		buttonStates[i].associatedButton = button
+
+		// Add button index for logging reasons
+		buttonStates[i].buttonIndex = i
 	}
 }
 
@@ -210,23 +223,23 @@ func potentiometerLoop() {
 	}
 }
 
-func buttonAction(b Buttons) {
+func buttonAction(b buttonState) {
 	if b.buttonPressedTime.Add(buttonLongPressTime).After(b.buttonReleasedTime) {
 		// Shortpress
-		cmd := exec.Command(conf.AHKExecutablePath, b.ShortPressAction)
+		cmd := exec.Command(conf.AHKExecutablePath, b.associatedButton.ShortPressAction)
 		err := cmd.Start()
 		if err != nil {
 			logger(err.Error(), logERROR)
 		}
-		logger(fmt.Sprintf("Button %v short pressed", b.buttonID), logINFO)
+		logger(fmt.Sprintf("Button %v short pressed", b.buttonIndex), logINFO)
 	} else {
 		// Longpress
-		cmd := exec.Command(conf.AHKExecutablePath, b.LongPressAction)
+		cmd := exec.Command(conf.AHKExecutablePath, b.associatedButton.LongPressAction)
 		err := cmd.Start()
 		if err != nil {
 			logger(err.Error(), logERROR)
 		}
-		logger(fmt.Sprintf("Button %v long pressed", b.buttonID), logINFO)
+		logger(fmt.Sprintf("Button %v long pressed", b.buttonIndex), logINFO)
 	}
 }
 
