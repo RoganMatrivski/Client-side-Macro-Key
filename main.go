@@ -48,11 +48,14 @@ type buttonState struct {
 }
 
 type loggingLevel int
+type profileSwitchType int
 
 const (
 	logERROR loggingLevel = iota
 	logWARNING
 	logINFO
+	nextProfile profileSwitchType = iota
+	prevProfile
 	buttonDebounceTime    time.Duration = time.Millisecond * 50
 	buttonLongPressTime   time.Duration = time.Millisecond * 300
 	potentiometerDeadzone byte          = 1
@@ -107,7 +110,9 @@ var (
 	potentiometerData      byte
 	prevPotentiometerState byte
 
-	buttonStates []buttonState
+	buttonStates        []buttonState
+	profileButtonStates []buttonState
+	currentProfileIndex int
 
 	signature     = []byte{2, 4, 3, 4}
 	offset    int = -1
@@ -176,6 +181,8 @@ func setup() {
 		}
 	}
 
+	updateProfileInterface()
+
 	buttonStates = make([]buttonState, conf.InputNumber)
 
 	// Assign default profile
@@ -185,6 +192,12 @@ func setup() {
 		// Add button index for logging reasons
 		buttonStates[i].buttonIndex = i
 	}
+
+	profileButtonStates = make([]buttonState, 2)
+
+	// Assigning the profile switching action here. I use the existing button structs because i'm lazy. And i know this is will bite me in the future.
+	profileButtonStates[0].associatedButton.ShortPressAction = "PREV"
+	profileButtonStates[1].associatedButton.ShortPressAction = "NEXT"
 }
 
 func valueToBar(value byte, barLength int, barString string) string {
@@ -269,10 +282,89 @@ func processButtonSignal(buttonSignal []int) {
 	}
 }
 
+func switchProfile(action profileSwitchType) {
+	switch action {
+	case prevProfile:
+		if currentProfileIndex-1 >= 0 {
+			currentProfileIndex--
+		}
+	case nextProfile:
+		if currentProfileIndex+1 < len(conf.Profiles) {
+			currentProfileIndex++
+		}
+	}
+
+	// Assign default profile
+	for i, button := range conf.Profiles[currentProfileIndex].Buttons {
+		buttonStates[i].associatedButton = button
+
+		// Add button index for logging reasons
+		buttonStates[i].buttonIndex = i
+	}
+
+	updateProfileInterface()
+}
+
+func updateProfileInterface() {
+	g.Update(func(g *gocui.Gui) error {
+		v, err := g.View("profile")
+		// maxX, _ := v.Size()
+		if err != nil {
+			panic(err)
+		}
+		v.Clear()
+
+		profileNames := make([]string, len(conf.Profiles))
+		for i, profile := range conf.Profiles {
+			profileNames[i] = profile.Name
+		}
+
+		// Add a selected indicator on the selected profile
+		profileNames[currentProfileIndex] = "> " + profileNames[currentProfileIndex]
+		fmt.Fprint(v, strings.Join(profileNames, "\n"))
+		return nil
+	})
+}
+
+func processProfileButtonSignal(buttonSignal []byte) {
+	for i := range buttonSignal {
+		if i+1 > len(profileButtonStates) {
+			return
+		}
+		currentButton := &profileButtonStates[i]
+
+		if buttonSignal[i] == 1 && currentButton.previousSignal == 0 {
+			if time.Now().After(currentButton.lastDebounceTime.Add(buttonDebounceTime)) {
+				// Button is pressed
+				currentTime := time.Now()
+				currentButton.lastDebounceTime = currentTime
+				currentButton.buttonPressedTime = currentTime
+				currentButton.previousSignal = 1
+			}
+		}
+
+		if buttonSignal[i] == 0 && currentButton.previousSignal == 1 {
+			// Button is released
+			currentButton.buttonReleasedTime = time.Now()
+			currentButton.previousSignal = 0
+			switch currentButton.associatedButton.ShortPressAction {
+			case "PREV":
+				// Prev button
+				logger("Prev button is pressed", logINFO)
+				switchProfile(prevProfile)
+			case "NEXT":
+				// Next button
+				logger("Next button is pressed", logINFO)
+				switchProfile(nextProfile)
+			}
+		}
+	}
+}
+
 func readSerialData(serialPort io.ReadWriteCloser) {
 	for {
 		// Read the data from serial port
-		buff := make([]byte, 6)
+		buff := make([]byte, 8)
 		serialPort.Read(buff)
 
 		// Extend it
@@ -295,7 +387,7 @@ func readSerialData(serialPort io.ReadWriteCloser) {
 		}
 
 		// Get serial data from extended serial data based from offset
-		serialData := extBuff[offset+4 : offset+6]
+		serialData := extBuff[offset+4 : offset+8]
 
 		// logger(fmt.Sprint(serialData, offset, extBuff), logINFO)
 
@@ -306,6 +398,15 @@ func readSerialData(serialPort io.ReadWriteCloser) {
 		buttonsData := byteToBits(serialData[0])
 		reverseAny(buttonsData)
 		processButtonSignal(buttonsData)
+
+		for i := range serialData[2:] {
+			if serialData[2+i] == 1 {
+				serialData[2+i] = 0
+			} else {
+				serialData[2+i] = 1
+			}
+		}
+		processProfileButtonSignal(serialData[2:])
 	}
 }
 
@@ -315,6 +416,7 @@ func mainLayout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		v.Title = "Logs"
 		v.Autoscroll = true
 	}
 
@@ -322,6 +424,7 @@ func mainLayout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		v.Title = "Audio Volume"
 		v.Autoscroll = true
 	}
 
@@ -329,6 +432,7 @@ func mainLayout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		v.Title = "Profiles"
 		v.Autoscroll = true
 	}
 
