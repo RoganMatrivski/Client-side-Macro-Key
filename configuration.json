@@ -3,38 +3,43 @@
     "InputNumber": 8,
     "LogLevel": "INFO",
     "AHKExecutablePath": "C:\\Program Files\\AutoHotkey\\AutoHotkey.exe",
-    "buttons": [
+    "Profiles": [
         {
-            "shortPressAction": "./ahkMacros/a.ahk",
-            "longPressAction": "./ahkMacros/aL.ahk"
-        },
-        {
-            "shortPressAction": "./ahkMacros/b.ahk",
-            "longPressAction": "./ahkMacros/bL.ahk"
-        },
-        {
-            "shortPressAction": "./ahkMacros/c.ahk",
-            "longPressAction": "./ahkMacros/cL.ahk"
-        },
-        {
-            "shortPressAction": "./ahkMacros/d.ahk",
-            "longPressAction": "./ahkMacros/dL.ahk"
-        },
-        {
-            "shortPressAction": "./ahkMacros/e.ahk",
-            "longPressAction": "./ahkMacros/eL.ahk"
-        },
-        {
-            "shortPressAction": "./ahkMacros/f.ahk",
-            "longPressAction": "./ahkMacros/fL.ahk"
-        },
-        {
-            "shortPressAction": "./ahkMacros/g.ahk",
-            "longPressAction": "./ahkMacros/gL.ahk"
-        },
-        {
-            "shortPressAction": "./ahkMacros/h.ahk",
-            "longPressAction": "./ahkMacros/hL.ahk"
+            "Name": "TestingProfile",
+            "Buttons": [
+                {
+                    "shortPressAction": "./ahkMacros/a.ahk",
+                    "longPressAction": "./ahkMacros/aL.ahk"
+                },
+                {
+                    "shortPressAction": "./ahkMacros/b.ahk",
+                    "longPressAction": "./ahkMacros/bL.ahk"
+                },
+                {
+                    "shortPressAction": "./ahkMacros/c.ahk",
+                    "longPressAction": "./ahkMacros/cL.ahk"
+                },
+                {
+                    "shortPressAction": "./ahkMacros/d.ahk",
+                    "longPressAction": "./ahkMacros/dL.ahk"
+                },
+                {
+                    "shortPressAction": "./ahkMacros/e.ahk",
+                    "longPressAction": "./ahkMacros/eL.ahk"
+                },
+                {
+                    "shortPressAction": "./ahkMacros/f.ahk",
+                    "longPressAction": "./ahkMacros/fL.ahk"
+                },
+                {
+                    "shortPressAction": "./ahkMacros/g.ahk",
+                    "longPressAction": "./ahkMacros/gL.ahk"
+                },
+                {
+                    "shortPressAction": "./ahkMacros/h.ahk",
+                    "longPressAction": "./ahkMacros/hL.ahk"
+                }
+            ]
         }
     ]
 }
