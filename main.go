@@ -6,11 +6,8 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"math"
-	"math/bits"
 	"os"
 	"os/exec"
-	"reflect"
 	"strings"
 	"time"
 
@@ -18,37 +15,6 @@ import (
 	"github.com/jacobsa/go-serial/serial"
 	"github.com/jroimartin/gocui"
 )
-
-type Configs struct {
-	ArduinoPort       string     `json:"ArduinoPort"`
-	InputNumber       int        `json:"InputNumber"`
-	LogLevel          string     `json:"LogLevel"`
-	AHKExecutablePath string     `json:"AHKExecutablePath"`
-	Profiles          []Profiles `json:"Profiles"`
-}
-
-type Profiles struct {
-	Name    string    `json:"Name"`
-	Buttons []Buttons `json:"Buttons"`
-}
-
-type Buttons struct {
-	ShortPressAction string `json:"shortPressAction"`
-	LongPressAction  string `json:"longPressAction"`
-}
-
-type buttonState struct {
-	buttonIndex        int
-	previousSignal     int
-	lastDebounceTime   time.Time
-	lastPressedTime    time.Time
-	buttonPressedTime  time.Time
-	buttonReleasedTime time.Time
-	associatedButton   Buttons
-}
-
-type loggingLevel int
-type profileSwitchType int
 
 const (
 	logERROR loggingLevel = iota
@@ -61,48 +27,6 @@ const (
 	potentiometerDeadzone byte          = 1
 	logPath               string        = "./applog.log"
 )
-
-func (lv loggingLevel) String() string { return [...]string{"ERROR", "WARNING", "INFO"}[lv] }
-
-func reverseAny(s interface{}) {
-	n := reflect.ValueOf(s).Len()
-	swap := reflect.Swapper(s)
-	for i, j := 0, n-1; i < j; i, j = i+1, j-1 {
-		swap(i, j)
-	}
-}
-
-func arrayCompare(a1 []byte, a2 []byte) bool {
-	for i, b := range a1 {
-		if b != a2[i] {
-			return false
-		}
-	}
-
-	return true
-}
-
-func byteToBits(data byte) (st []int) {
-	st = make([]int, 8) // Performance x 2 as no append occurs.
-	for j := 0; j < 8; j++ {
-		if bits.LeadingZeros8(data) == 0 {
-			// No leading 0 means that it is a 0
-			// Extra author comments: I revert the data because i'm a bit too lazy to revert it on arduino
-			st[j] = 0
-		} else {
-			st[j] = 1
-		}
-		data = data << 1
-	}
-	return
-}
-
-func byteAbs(b byte) byte {
-	if b < 0 {
-		return b
-	}
-	return -b
-}
 
 var (
 	conf Configs
@@ -155,7 +79,7 @@ func logger(s string, lv loggingLevel) {
 
 func setup() {
 	logs = make([]string, 100)
-	file, err := os.Create(logPath)
+	file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -167,13 +91,14 @@ func setup() {
 	jsonFile, _ := ioutil.ReadFile("./configuration.json")
 	if err := json.Unmarshal(jsonFile, &conf); err != nil {
 		logger(err.Error(), logERROR)
-	}
-
-	if len(buttonStates) > conf.InputNumber {
-		logger(fmt.Sprintf("More than %v keys macro are not supported by hardware", conf.InputNumber), logERROR)
+		os.Exit(1)
 	}
 
 	for _, profile := range conf.Profiles {
+		if len(profile.Buttons) > conf.InputNumber {
+			logger(fmt.Sprintf("More than %v keys macro are not supported by hardware", conf.InputNumber), logERROR)
+		}
+
 		for _, b := range profile.Buttons {
 			if b.ShortPressAction == "" && b.LongPressAction == "" {
 				logger("One of the key have both of the actions unassigned.", logWARNING)
@@ -198,13 +123,6 @@ func setup() {
 	// Assigning the profile switching action here. I use the existing button structs because i'm lazy. And i know this is will bite me in the future.
 	profileButtonStates[0].associatedButton.ShortPressAction = "PREV"
 	profileButtonStates[1].associatedButton.ShortPressAction = "NEXT"
-}
-
-func valueToBar(value byte, barLength int, barString string) string {
-	mappedValue := int(math.Floor((float64(value) / float64(100)) * float64(barLength)))
-	bar := strings.Repeat(barString, mappedValue)
-	empty := strings.Repeat(" ", barLength-mappedValue)
-	return bar + empty
 }
 
 func potentiometerLoop() {
@@ -308,20 +226,41 @@ func switchProfile(action profileSwitchType) {
 func updateProfileInterface() {
 	g.Update(func(g *gocui.Gui) error {
 		v, err := g.View("profile")
-		// maxX, _ := v.Size()
+		_, maxY := v.Size()
+		maxY--
 		if err != nil {
 			panic(err)
 		}
 		v.Clear()
 
-		profileNames := make([]string, len(conf.Profiles))
-		for i, profile := range conf.Profiles {
-			profileNames[i] = profile.Name
+		var profileNames []string
+		profileNames = make([]string, maxY)
+
+		if len(conf.Profiles) > maxY {
+			switch {
+			case currentProfileIndex < maxY/2:
+				for i, profile := range conf.Profiles[:maxY] {
+					profileNames[i] = profile.Name
+				}
+			case currentProfileIndex > len(conf.Profiles)-(maxY/2):
+				for i, profile := range conf.Profiles[len(conf.Profiles)-maxY:] {
+					profileNames[i] = profile.Name
+				}
+			default:
+				for i, profile := range conf.Profiles[currentProfileIndex-maxY/2 : currentProfileIndex+maxY/2] {
+					profileNames[i] = profile.Name
+				}
+			}
+		} else {
+			for i, profile := range conf.Profiles {
+				profileNames[i] = profile.Name
+			}
 		}
 
 		// Add a selected indicator on the selected profile
 		profileNames[currentProfileIndex] = "> " + profileNames[currentProfileIndex]
 		fmt.Fprint(v, strings.Join(profileNames, "\n"))
+		logger(fmt.Sprint(maxY, maxY/2, len(conf.Profiles)), logINFO)
 		return nil
 	})
 }
@@ -440,6 +379,8 @@ func mainLayout(g *gocui.Gui) error {
 }
 
 func main() {
+	test()
+	os.Exit(0)
 	// All of these below is for the interface.
 	var err error
 	g, err = gocui.NewGui(gocui.OutputNormal)
@@ -457,6 +398,20 @@ func main() {
 		return gocui.ErrQuit
 	}); err != nil {
 		logger(err.Error(), logERROR)
+	}
+	if err := g.SetKeybinding("log", gocui.KeyArrowUp, gocui.ModNone,
+		func(g *gocui.Gui, v *gocui.View) error {
+			scrollView(v, -1)
+			return nil
+		}); err != nil {
+		panic(err)
+	}
+	if err := g.SetKeybinding("log", gocui.KeyArrowDown, gocui.ModNone,
+		func(g *gocui.Gui, v *gocui.View) error {
+			scrollView(v, 1)
+			return nil
+		}); err != nil {
+		panic(err)
 	}
 
 	// =====================================================
@@ -490,4 +445,15 @@ func main() {
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
 		logger(err.Error(), logERROR)
 	}
+}
+
+func scrollView(v *gocui.View, dy int) error {
+	if v != nil {
+		v.Autoscroll = false
+		ox, oy := v.Origin()
+		if err := v.SetOrigin(ox, oy+dy); err != nil {
+			return err
+		}
+	}
+	return nil
 }
