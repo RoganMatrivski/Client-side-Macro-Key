@@ -13,6 +13,7 @@ type Configs struct {
 type Profiles struct {
 	Name    string    `json:"Name"`
 	Buttons []Buttons `json:"Buttons"`
+	Index   int
 }
 
 type Buttons struct {

@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"fyne.io/fyne"
 	"github.com/itchyny/volume-go"
 	"github.com/jacobsa/go-serial/serial"
-	"github.com/jroimartin/gocui"
 )
 
 const (
@@ -45,8 +45,6 @@ var (
 	infoLogger    *log.Logger
 	warningLogger *log.Logger
 	errorLogger   *log.Logger
-
-	g *gocui.Gui
 )
 
 func arrayLog(s string) {
@@ -65,16 +63,32 @@ func logger(s string, lv loggingLevel) {
 
 	arrayLog(s)
 
-	g.Update(func(g *gocui.Gui) error {
-		v, err := g.View("log")
-		_, maxY := v.Size()
-		if err != nil {
-			panic(err)
-		}
-		v.Clear()
-		fmt.Fprintln(v, strings.Join(logs[len(logs)-maxY:], "\n"))
-		return nil
-	})
+	fmt.Println(s)
+
+	// TODO: Add function that adds something to log window
+	if logWindow != nil {
+		viewedLogs := logs[len(logs)-(40+1):]
+
+		logTexts.SetText(strings.Join(viewedLogs, "\n"))
+		logScrollContainer.Offset = fyne.NewPos(0, logScrollContainer.Content.Size().Height-logScrollContainer.Size().Height)
+		logTexts.Refresh()
+		logScrollContainer.Refresh()
+	}
+}
+
+func switchProfileToIndex(idx int) {
+	fmt.Println(idx)
+	currentProfileIndex = idx
+
+	// Assign default profile
+	for i, button := range conf.Profiles[idx].Buttons {
+		buttonStates[i].associatedButton = button
+
+		// Add button index for logging reasons
+		buttonStates[i].buttonIndex = i
+	}
+
+	updateProfileInterface()
 }
 
 func setup() {
@@ -94,7 +108,7 @@ func setup() {
 		os.Exit(1)
 	}
 
-	for _, profile := range conf.Profiles {
+	for i, profile := range conf.Profiles {
 		if len(profile.Buttons) > conf.InputNumber {
 			logger(fmt.Sprintf("More than %v keys macro are not supported by hardware", conf.InputNumber), logERROR)
 		}
@@ -104,19 +118,17 @@ func setup() {
 				logger("One of the key have both of the actions unassigned.", logWARNING)
 			}
 		}
+
+		conf.Profiles[i].Index = i
 	}
 
+	setupUI()
 	updateProfileInterface()
 
 	buttonStates = make([]buttonState, conf.InputNumber)
 
 	// Assign default profile
-	for i, button := range conf.Profiles[0].Buttons {
-		buttonStates[i].associatedButton = button
-
-		// Add button index for logging reasons
-		buttonStates[i].buttonIndex = i
-	}
+	switchProfileToIndex(0)
 
 	profileButtonStates = make([]buttonState, 2)
 
@@ -136,16 +148,9 @@ func potentiometerLoop() {
 
 			logger(fmt.Sprintf("set volume to %v%%", potentiometerData), logINFO)
 
-			g.Update(func(g *gocui.Gui) error {
-				v, err := g.View("volume")
-				maxX, _ := v.Size()
-				if err != nil {
-					panic(err)
-				}
-				v.Clear()
-				fmt.Fprint(v, " [", valueToBar(potentiometerData, maxX-4, "="), "] ")
-				return nil
-			})
+			// TODO: Add function that updates volume bar
+			volumeBar.Value = float64(potentiometerData)
+			volumeBar.Refresh()
 
 			prevPotentiometerState = potentiometerData
 		}
@@ -224,45 +229,45 @@ func switchProfile(action profileSwitchType) {
 }
 
 func updateProfileInterface() {
-	g.Update(func(g *gocui.Gui) error {
-		v, err := g.View("profile")
-		_, maxY := v.Size()
-		maxY--
-		if err != nil {
-			panic(err)
-		}
-		v.Clear()
+	// TODO: Add function that updates the profile view
+	profileNames := make([]string, len(conf.Profiles))
+	for i, profile := range conf.Profiles {
+		profileNames[i] = profile.Name
+	}
 
-		var profileNames []string
-		profileNames = make([]string, maxY)
+	selectedProfileLabel.SetText(fmt.Sprintf("Selected Profile:\n%v", profileNames[currentProfileIndex]))
 
-		if len(conf.Profiles) > maxY {
-			switch {
-			case currentProfileIndex < maxY/2:
-				for i, profile := range conf.Profiles[:maxY] {
-					profileNames[i] = profile.Name
-				}
-			case currentProfileIndex > len(conf.Profiles)-(maxY/2):
-				for i, profile := range conf.Profiles[len(conf.Profiles)-maxY:] {
-					profileNames[i] = profile.Name
-				}
-			default:
-				for i, profile := range conf.Profiles[currentProfileIndex-maxY/2 : currentProfileIndex+maxY/2] {
-					profileNames[i] = profile.Name
-				}
-			}
-		} else {
-			for i, profile := range conf.Profiles {
-				profileNames[i] = profile.Name
-			}
-		}
+	// Add a selected indicator on the selected profile
+	profileNames[currentProfileIndex] = "> " + profileNames[currentProfileIndex]
+	for i, e := range profileListLabels {
+		e.SetText(profileNames[i])
+	}
 
-		// Add a selected indicator on the selected profile
-		profileNames[currentProfileIndex] = "> " + profileNames[currentProfileIndex]
-		fmt.Fprint(v, strings.Join(profileNames, "\n"))
-		logger(fmt.Sprint(maxY, maxY/2, len(conf.Profiles)), logINFO)
-		return nil
-	})
+	// Scroll if the selected profile is on threshold
+	// Het how big the profile label (with padding) is
+	profileLabelHeight := profileListLabels[0].Size().Height + appUI.Settings().Theme().Padding()
+
+	// Get how many visible profile is on the container. The cutoffed one isn't included
+	visibleProfilesCount := profileListWithScroll.Size().Height / profileLabelHeight
+
+	// Get the cutoffed item height
+	cutoffedItemHeight := profileListWithScroll.Size().Height - (visibleProfilesCount * profileLabelHeight)
+
+	switch {
+	// If pointer is below half of the visible item
+	case currentProfileIndex < visibleProfilesCount/2:
+		// Scroll to beginning
+		profileListWithScroll.Offset = fyne.NewPos(0, 0)
+	case currentProfileIndex > len(conf.Profiles)-1-visibleProfilesCount/2:
+		// Scroll to end
+		profileListWithScroll.Offset = fyne.NewPos(0, profileListWithScroll.Content.Size().Height-((visibleProfilesCount-1)*profileLabelHeight))
+	default:
+		// Scroll the selected one to the middle
+		profileListWithScroll.Offset = fyne.NewPos(0, profileLabelHeight*(currentProfileIndex-visibleProfilesCount/2)+(cutoffedItemHeight/2))
+	}
+
+	profileListWithScroll.Refresh()
+	profileListWithScroll.Content.Refresh()
 }
 
 func processProfileButtonSignal(buttonSignal []byte) {
@@ -349,73 +354,7 @@ func readSerialData(serialPort io.ReadWriteCloser) {
 	}
 }
 
-func mainLayout(g *gocui.Gui) error {
-	maxX, maxY := g.Size()
-	if v, err := g.SetView("log", maxX/4, 3, maxX-1, maxY-1); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		v.Title = "Logs"
-		v.Autoscroll = true
-	}
-
-	if v, err := g.SetView("volume", maxX/4, 0, maxX-1, 2); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		v.Title = "Audio Volume"
-		v.Autoscroll = true
-	}
-
-	if v, err := g.SetView("profile", 0, 0, (maxX/4)-1, maxY-1); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		v.Title = "Profiles"
-		v.Autoscroll = true
-	}
-
-	return nil
-}
-
 func main() {
-	test()
-	os.Exit(0)
-	// All of these below is for the interface.
-	var err error
-	g, err = gocui.NewGui(gocui.OutputNormal)
-	if err != nil {
-		logger(err.Error(), logERROR)
-	}
-
-	// Close GUI after loop ends
-	defer g.Close()
-
-	g.SetManagerFunc(mainLayout)
-
-	// Set GUI keybindings
-	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return gocui.ErrQuit
-	}); err != nil {
-		logger(err.Error(), logERROR)
-	}
-	if err := g.SetKeybinding("log", gocui.KeyArrowUp, gocui.ModNone,
-		func(g *gocui.Gui, v *gocui.View) error {
-			scrollView(v, -1)
-			return nil
-		}); err != nil {
-		panic(err)
-	}
-	if err := g.SetKeybinding("log", gocui.KeyArrowDown, gocui.ModNone,
-		func(g *gocui.Gui, v *gocui.View) error {
-			scrollView(v, 1)
-			return nil
-		}); err != nil {
-		panic(err)
-	}
-
-	// =====================================================
-
 	setup()
 
 	// Run the potentiometer loop
@@ -441,19 +380,5 @@ func main() {
 
 	go readSerialData(port)
 
-	// Main GUI Loop
-	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
-		logger(err.Error(), logERROR)
-	}
-}
-
-func scrollView(v *gocui.View, dy int) error {
-	if v != nil {
-		v.Autoscroll = false
-		ox, oy := v.Origin()
-		if err := v.SetOrigin(ox, oy+dy); err != nil {
-			return err
-		}
-	}
-	return nil
+	mainWindow.ShowAndRun()
 }

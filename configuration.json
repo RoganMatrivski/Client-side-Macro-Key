@@ -8,8 +8,8 @@
             "Name": "TestingProfile",
             "Buttons": [
                 {
-                    "shortPressAction": "./ahkMacros/c.ahk",
-                    "longPressAction": "./ahkMacros/cL.ahk"
+                    "shortPressAction": "./ahkMacros/a.ahk",
+                    "longPressAction": "./ahkMacros/aL.ahk"
                 }
             ]
         },
@@ -17,8 +17,8 @@
             "Name": "TestingProfile1",
             "Buttons": [
                 {
-                    "shortPressAction": "./ahkMacros/c.ahk",
-                    "longPressAction": "./ahkMacros/cL.ahk"
+                    "shortPressAction": "./ahkMacros/ab.ahk",
+                    "longPressAction": "./ahkMacros/aL.ahk"
                 }
             ]
         },
