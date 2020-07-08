@@ -309,12 +309,11 @@ func processProfileButtonSignal(buttonSignal []byte) {
 var ignoreDataCount int = 50
 
 func readSerialData(serialPort io.ReadWriteCloser) {
-	if ignoreDataCount != 0 {
-		ignoreDataCount--
-		return
-	}
-
 	for {
+		if ignoreDataCount != 0 {
+			ignoreDataCount--
+			continue
+		}
 		// Read the data from serial port
 		buff := make([]byte, 8)
 		serialPort.Read(buff)
