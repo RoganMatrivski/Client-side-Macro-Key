@@ -1,0 +1,3 @@
+[submodule "arduinoSource"]
+	path = arduinoSource
+	url = https://github.com/RoganMatrivski/MacroKeyApp-ArduinoSource.git
