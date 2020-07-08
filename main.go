@@ -305,7 +305,15 @@ func processProfileButtonSignal(buttonSignal []byte) {
 	}
 }
 
+// Ignore some bad data at the start
+var ignoreDataCount int = 50
+
 func readSerialData(serialPort io.ReadWriteCloser) {
+	if ignoreDataCount != 0 {
+		ignoreDataCount--
+		return
+	}
+
 	for {
 		// Read the data from serial port
 		buff := make([]byte, 8)
