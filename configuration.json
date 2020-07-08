@@ -5,29 +5,31 @@
     "AHKExecutablePath": "C:\\Program Files\\AutoHotkey\\AutoHotkey.exe",
     "Profiles": [
         {
-            "Name": "TestingProfile",
+            "Name": "Main Profile",
             "Buttons": [
                 {
-                    "shortPressAction": "./ahkMacros/a.ahk",
-                    "longPressAction": "./ahkMacros/aL.ahk"
-                }
-            ]
-        },
-        {
-            "Name": "TestingProfile1",
-            "Buttons": [
+                    "shortPressAction": "./a.ahk",
+                    "longPressAction": "./aL.ahk"
+                },
                 {
-                    "shortPressAction": "./ahkMacros/ab.ahk",
-                    "longPressAction": "./ahkMacros/aL.ahk"
-                }
-            ]
-        },
-        {
-            "Name": "TestingProfile2",
-            "Buttons": [
+                    "shortPressAction": "./b.ahk",
+                    "longPressAction": "./bL.ahk"
+                },
                 {
-                    "shortPressAction": "./ahkMacros/c.ahk",
-                    "longPressAction": "./ahkMacros/cL.ahk"
+                    "shortPressAction": "./c.ahk",
+                    "longPressAction": "./cL.ahk"
+                },
+                {
+                    "shortPressAction": "./d.ahk",
+                    "longPressAction": "./dL.ahk"
+                },
+                {
+                    "shortPressAction": "./e.ahk",
+                    "longPressAction": "./eL.ahk"
+                },
+                {
+                    "shortPressAction": "./f.ahk",
+                    "longPressAction": "./fL.ahk"
                 }
             ]
         }
