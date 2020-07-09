@@ -310,10 +310,6 @@ var ignoreDataCount int = 50
 
 func readSerialData(serialPort io.ReadWriteCloser) {
 	for {
-		if ignoreDataCount != 0 {
-			ignoreDataCount--
-			continue
-		}
 		// Read the data from serial port
 		buff := make([]byte, 8)
 		serialPort.Read(buff)
@@ -335,6 +331,12 @@ func readSerialData(serialPort io.ReadWriteCloser) {
 				offset = i
 				break
 			}
+		}
+
+		// Ignore data
+		if ignoreDataCount != 0 {
+			ignoreDataCount--
+			continue
 		}
 
 		// Get serial data from extended serial data based from offset
